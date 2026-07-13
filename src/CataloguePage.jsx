@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
-
-const API = 'http://localhost:3001'
+import { API } from './api.js'
 
 function ProductCard({ item }) {
   const [imgError, setImgError] = useState(false)

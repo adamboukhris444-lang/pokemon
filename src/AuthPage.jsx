@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
+import { API } from './api.js'
 
-const inputClass = 'px-3 py-2.5 rounded-lg border-2 border-gray-300 text-base focus:border-poke-dark outline-none w-full'
+const inputClass = 'px-3 py-2.5 rounded-lg border-2 border-gray-300 text-base focus:border-poke-dark outline-none w-full transition-colors'
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID
 
 export default function AuthPage({ onLogin }) {
@@ -14,7 +15,7 @@ export default function AuthPage({ onLogin }) {
     setError(null)
     setLoading(true)
     try {
-      const res = await fetch('http://localhost:3001/api/auth/google', {
+      const res = await fetch(`${API}/api/auth/google`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -64,7 +65,7 @@ export default function AuthPage({ onLogin }) {
     setLoading(true)
     try {
       const endpoint = mode === 'login' ? '/api/auth/login' : '/api/auth/register'
-      const res = await fetch(`http://localhost:3001${endpoint}`, {
+      const res = await fetch(`${API}${endpoint}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',

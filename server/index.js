@@ -602,5 +602,19 @@ app.delete('/api/annonces/:id', authMiddleware, async (req, res) => {
   }
 })
 
+app.delete('/api/items/:id', authMiddleware, async (req, res) => {
+  try {
+    const result = await pool.query(
+      'DELETE FROM item WHERE id = $1 AND user_id = $2 RETURNING id',
+      [req.params.id, req.user.id]
+    )
+    if (!result.rows[0]) return res.status(404).json({ error: 'Item introuvable.' })
+    res.json({ ok: true })
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ error: 'Impossible de supprimer l\'item.' })
+  }
+})
+
 const port = process.env.PORT || 3001
 app.listen(port, () => console.log(`API démarrée sur http://localhost:${port}`))

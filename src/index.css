@@ -28,6 +28,10 @@
 body {
   margin: 0;
   font-family: 'Segoe UI', system-ui, sans-serif;
-  background: linear-gradient(180deg, var(--color-poke-yellow) 0%, #fff6cc 200px, #f4f4f4 200px);
+  background: #f2f2f2;
   color: var(--color-poke-dark);
 }
+
+/* Masquer la scrollbar du nav header sans désactiver le scroll */
+header nav::-webkit-scrollbar { display: none; }
+header nav { scrollbar-width: none; }

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { API } from './api.js'
 
 const QUERIES = [
   'Catalogue complet Pokemon TCG France 2025 avec EAN',
@@ -20,7 +21,7 @@ export default function ReferentielPage() {
   async function loadReferentiel() {
     setLoading(true)
     try {
-      const res = await fetch('http://localhost:3001/api/referentiel')
+      const res = await fetch(`${API}/api/referentiel`)
       if (!res.ok) throw new Error()
       setItems(await res.json())
     } catch {
@@ -37,7 +38,7 @@ export default function ReferentielPage() {
     setError(null)
     try {
       const q = query.trim() || 'produits Pokemon TCG disponibles en France 2024 2025'
-      const res = await fetch('http://localhost:3001/api/referentiel/enrich', {
+      const res = await fetch(`${API}/api/referentiel/enrich`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ query: q }),
