@@ -15,7 +15,7 @@ app.use(express.json())
 app.use(cookieParser())
 
 // Proxy d'images — évite les blocages navigateur sur les CDN externes
-const ALLOWED_IMG_HOSTS = ['assets.tcgdex.net', 'assets.pokemon.com', 'www.pokepedia.fr', 'raw.githubusercontent.com', 'images.pokemontcg.io']
+const ALLOWED_IMG_HOSTS = ['assets.tcgdex.net', 'assets.pokemon.com', 'www.pokepedia.fr', 'raw.githubusercontent.com', 'images.pokemontcg.io', 'pokecardex-scans.b-cdn.net']
 app.get('/api/img', async (req, res) => {
   const { url } = req.query
   if (!url) return res.status(400).end()
@@ -248,7 +248,7 @@ app.get('/api/pokemon/:id/cards', async (req, res) => {
         if (nameRes.ok) {
           const nameList = await nameRes.json()
           const seen = new Set(list.map((c) => c.id))
-          // smp inclus même sans image TCGdex — fallback pokemontcg.io (seule source disponible pour ces promos)
+          // smp inclus même sans image TCGdex — images FR disponibles sur pokecardex-scans CDN (PRSM)
           const extras = (Array.isArray(nameList) ? nameList : []).filter((c) => {
             if (seen.has(c.id)) return false
             if (c.image) return true
@@ -264,16 +264,26 @@ app.get('/api/pokemon/:id/cards', async (req, res) => {
     function toCard(c) {
       const setId = c.id.slice(0, c.id.length - c.localId.length - 1)
       const setInfo = setsMap[setId] || {}
-      // smp : pas d'image sur TCGdex FR → fallback pokemontcg.io
-      const imgBase = c.image || (setId === 'smp' ? `https://images.pokemontcg.io/smp/${c.localId}` : null)
-      if (!imgBase) return null
-      const isTcgdex = !!c.image
+      // smp : pas d'image sur TCGdex FR → images françaises sur pokecardex-scans CDN (PRSM)
+      // URL pattern : /sets/PRSM/FR/{numéro}.jpg?class=md — ex: SM168 → 168
+      let imgBase = c.image || null
+      let imageUrl, imageHighUrl
+      if (!imgBase && setId === 'smp') {
+        const num = parseInt(c.localId.replace(/^SM0*/, ''), 10)
+        imageUrl = `${BASE_URL}/api/img?url=${encodeURIComponent(`https://pokecardex-scans.b-cdn.net/sets/PRSM/FR/${num}.jpg?class=md`)}`
+        imageHighUrl = `${BASE_URL}/api/img?url=${encodeURIComponent(`https://pokecardex-scans.b-cdn.net/sets/PRSM/FR/${num}.jpg?class=hd`)}`
+      } else if (imgBase) {
+        imageUrl = `${BASE_URL}/api/img?url=${encodeURIComponent(imgBase + '/low.png')}`
+        imageHighUrl = `${BASE_URL}/api/img?url=${encodeURIComponent(imgBase + '/high.png')}`
+      } else {
+        return null
+      }
       return {
         id: c.id,
         name: c.name,
         number: c.localId,
-        image: `${BASE_URL}/api/img?url=${encodeURIComponent(imgBase + (isTcgdex ? '/low.png' : '.png'))}`,
-        imageHigh: `${BASE_URL}/api/img?url=${encodeURIComponent(imgBase + (isTcgdex ? '/high.png' : '_hires.png'))}`,
+        image: imageUrl,
+        imageHigh: imageHighUrl,
         setName: setInfo.name || setId,
         setSeries: setInfo.series || null,
         seriesId: setInfo.seriesId || null,
