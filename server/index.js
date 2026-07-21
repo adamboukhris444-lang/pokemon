@@ -248,8 +248,12 @@ app.get('/api/pokemon/:id/cards', async (req, res) => {
         if (nameRes.ok) {
           const nameList = await nameRes.json()
           const seen = new Set(list.map((c) => c.id))
-          // Uniquement les cartes avec image française disponible sur TCGdex
-          const extras = (Array.isArray(nameList) ? nameList : []).filter((c) => !seen.has(c.id) && c.image)
+          // smp inclus même sans image TCGdex — fallback pokemontcg.io (seule source disponible pour ces promos)
+          const extras = (Array.isArray(nameList) ? nameList : []).filter((c) => {
+            if (seen.has(c.id)) return false
+            if (c.image) return true
+            return c.id.startsWith('smp-')
+          })
           if (extras.length > 0) list = [...list, ...extras]
         }
       } catch {}
@@ -260,12 +264,16 @@ app.get('/api/pokemon/:id/cards', async (req, res) => {
     function toCard(c) {
       const setId = c.id.slice(0, c.id.length - c.localId.length - 1)
       const setInfo = setsMap[setId] || {}
+      // smp : pas d'image sur TCGdex FR → fallback pokemontcg.io
+      const imgBase = c.image || (setId === 'smp' ? `https://images.pokemontcg.io/smp/${c.localId}` : null)
+      if (!imgBase) return null
+      const isTcgdex = !!c.image
       return {
         id: c.id,
         name: c.name,
         number: c.localId,
-        image: `${BASE_URL}/api/img?url=${encodeURIComponent(c.image + '/low.png')}`,
-        imageHigh: `${BASE_URL}/api/img?url=${encodeURIComponent(c.image + '/high.png')}`,
+        image: `${BASE_URL}/api/img?url=${encodeURIComponent(imgBase + (isTcgdex ? '/low.png' : '.png'))}`,
+        imageHigh: `${BASE_URL}/api/img?url=${encodeURIComponent(imgBase + (isTcgdex ? '/high.png' : '_hires.png'))}`,
         setName: setInfo.name || setId,
         setSeries: setInfo.series || null,
         seriesId: setInfo.seriesId || null,
@@ -274,8 +282,9 @@ app.get('/api/pokemon/:id/cards', async (req, res) => {
     }
 
     let cards = list
-      .filter((c) => c.image)
+      .filter((c) => c.image || c.id.startsWith('smp-'))
       .map(toCard)
+      .filter(Boolean)
       .filter((c) => c.seriesId !== 'tcgp')
       .sort((a, b) => (a.releaseDate || '9999').localeCompare(b.releaseDate || '9999'))
       .map((c) => ({ ...c, edition: null }))
