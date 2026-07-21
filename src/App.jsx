@@ -74,17 +74,20 @@ function PokemonDetailPage({ pokemon, onBack }) {
   const [cardsError, setCardsError] = useState(null)
   const [zoomCard, setZoomCard] = useState(null)
 
-  useEffect(() => {
+  function loadCards(refresh = false) {
     if (!pokemon) return
     setCards([])
     setCardsError(null)
     setCardsLoading(true)
-    fetch(`${API}/api/pokemon/${pokemon.id}/cards`)
+    const url = `${API}/api/pokemon/${pokemon.id}/cards${refresh ? '?refresh=1' : ''}`
+    fetch(url)
       .then((r) => { if (!r.ok) throw new Error(); return r.json() })
       .then(setCards)
       .catch(() => setCardsError('Impossible de charger les cartes.'))
       .finally(() => setCardsLoading(false))
-  }, [pokemon])
+  }
+
+  useEffect(() => { loadCards() }, [pokemon])
 
   if (!pokemon) return null
 
@@ -118,9 +121,19 @@ function PokemonDetailPage({ pokemon, onBack }) {
       </div>
 
       <div className="mt-8 w-screen relative left-1/2 -translate-x-1/2 px-6">
-        <h3 className="text-center text-xl font-bold mb-1">Cartes existantes</h3>
+        <div className="flex items-center justify-center gap-3 mb-1">
+          <h3 className="text-center text-xl font-bold">Cartes existantes</h3>
+          <button
+            onClick={() => loadCards(true)}
+            disabled={cardsLoading}
+            className="px-3 py-1 rounded-full border border-gray-300 bg-white text-xs font-semibold text-gray-500 hover:border-poke-dark hover:text-poke-dark cursor-pointer transition-colors disabled:opacity-40"
+            title="Forcer la mise à jour depuis TCGdex"
+          >
+            {cardsLoading ? '…' : '↻ Rafraîchir'}
+          </button>
+        </div>
         <p className="text-center text-xs text-gray-400 mb-5">
-          Source : TCGdex (fr) · Les exclusivités japonaises peuvent ne pas être indexées
+          Source : TCGdex (fr) · Promos incluses · Les exclusivités japonaises peuvent ne pas être indexées
         </p>
 
         {cardsLoading && (

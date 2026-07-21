@@ -45,8 +45,13 @@ async function ensureTables() {
       reference varchar(100),
       categorie varchar(100),
       source varchar(50) DEFAULT 'hermes-agent',
+      origine varchar(255),
       created_at timestamptz DEFAULT now()
     );
+    ALTER TABLE referentiel ADD COLUMN IF NOT EXISTS origine varchar(255);
+    ALTER TABLE IF EXISTS carte ADD COLUMN IF NOT EXISTS source varchar(50);
+    ALTER TABLE IF EXISTS carte ADD COLUMN IF NOT EXISTS origine varchar(255);
+    ALTER TABLE IF EXISTS carte ADD COLUMN IF NOT EXISTS updated_at timestamptz DEFAULT now();
   `)
 }
 
@@ -200,10 +205,10 @@ async function saveCards(pokemonId, cards) {
   await pool.query('DELETE FROM carte WHERE pokemon_id = $1', [pokemonId])
   for (const c of cards) {
     await pool.query(
-      `INSERT INTO carte (id, pokemon_id, name, number, image, set_name, set_series, series_id, release_date, edition, has_first_edition)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      `INSERT INTO carte (id, pokemon_id, name, number, image, set_name, set_series, series_id, release_date, edition, has_first_edition, source, origine)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'tcgdex-api', 'tcgdex.dev')
        ON CONFLICT (id) DO UPDATE
-       SET name = $3, number = $4, image = $5, set_name = $6, set_series = $7, series_id = $8, release_date = $9, edition = $10, has_first_edition = $11, updated_at = now()`,
+       SET name = $3, number = $4, image = $5, set_name = $6, set_series = $7, series_id = $8, release_date = $9, edition = $10, has_first_edition = $11, updated_at = now(), source = 'tcgdex-api', origine = 'tcgdex.dev'`,
       [c.id, pokemonId, c.name, c.number, c.image, c.setName, c.setSeries, c.seriesId, c.releaseDate, c.edition, c.hasFirstEdition || false]
     )
   }
@@ -211,43 +216,68 @@ async function saveCards(pokemonId, cards) {
 
 app.get('/api/pokemon/:id/cards', async (req, res) => {
   const id = Number(req.params.id)
+  const forceRefresh = req.query.refresh === '1'
+
   try {
-    const cached = await pool.query('SELECT * FROM carte WHERE pokemon_id = $1 ORDER BY release_date ASC', [id])
-    if (cached.rows.length > 0) {
-      return res.json(cached.rows.map(cardRowToApi))
+    // Cache de 7 jours — les promos ajoutées à TCGdex après le premier chargement seront récupérées
+    if (!forceRefresh) {
+      const cached = await pool.query(
+        `SELECT * FROM carte WHERE pokemon_id = $1
+         AND (updated_at IS NULL OR updated_at > now() - interval '7 days')
+         ORDER BY release_date ASC`,
+        [id]
+      )
+      if (cached.rows.length > 0) return res.json(cached.rows.map(cardRowToApi))
     }
+
+    // Nom français du Pokémon pour la recherche complémentaire par nom (promos)
+    const pkRow = await pool.query('SELECT name_fr FROM pokemon WHERE id = $1', [id])
+    const nameFr = pkRow.rows[0]?.name_fr
 
     const [listRes, setsMap] = await Promise.all([
       fetch(`https://api.tcgdex.net/v2/fr/cards?dexId=eq:${id}`),
       getTcgdexSetsMap(),
     ])
     if (!listRes.ok) throw new Error('TCGdex request failed')
-    const list = await listRes.json()
+    let list = await listRes.json()
+
+    // Recherche complémentaire par nom français — capture les promos non indexées par dexId
+    if (nameFr) {
+      try {
+        const nameRes = await fetch(`https://api.tcgdex.net/v2/fr/cards?name=${encodeURIComponent(nameFr)}`)
+        if (nameRes.ok) {
+          const nameList = await nameRes.json()
+          const seen = new Set(list.map((c) => c.id))
+          const extras = (Array.isArray(nameList) ? nameList : []).filter((c) => !seen.has(c.id) && c.image)
+          if (extras.length > 0) list = [...list, ...extras]
+        }
+      } catch {}
+    }
+
+    function toCard(c) {
+      const setId = c.id.slice(0, c.id.length - c.localId.length - 1)
+      const setInfo = setsMap[setId] || {}
+      return {
+        id: c.id,
+        name: c.name,
+        number: c.localId,
+        image: `http://localhost:3001/api/img?url=${encodeURIComponent(c.image + '/low.png')}`,
+        imageHigh: `http://localhost:3001/api/img?url=${encodeURIComponent(c.image + '/high.png')}`,
+        setName: setInfo.name || setId,
+        setSeries: setInfo.series || null,
+        seriesId: setInfo.seriesId || null,
+        releaseDate: setInfo.releaseDate || null,
+      }
+    }
 
     let cards = list
       .filter((c) => c.image)
-      .map((c) => {
-        const setId = c.id.slice(0, c.id.length - c.localId.length - 1)
-        const setInfo = setsMap[setId] || {}
-        return {
-          id: c.id,
-          name: c.name,
-          number: c.localId,
-          image: `http://localhost:3001/api/img?url=${encodeURIComponent(c.image + '/low.png')}`,
-          imageHigh: `http://localhost:3001/api/img?url=${encodeURIComponent(c.image + '/high.png')}`,
-          setName: setInfo.name || setId,
-          setSeries: setInfo.series || null,
-          seriesId: setInfo.seriesId || null,
-          releaseDate: setInfo.releaseDate || null,
-        }
-      })
-      // Exclut le jeu mobile Pokémon TCG Pocket — ce n'est pas un produit physique
+      .map(toCard)
       .filter((c) => c.seriesId !== 'tcgp')
       .sort((a, b) => (a.releaseDate || '9999').localeCompare(b.releaseDate || '9999'))
       .map((c) => ({ ...c, edition: null }))
 
-    // Pour les cartes Wizards (Base) / Neo, on vérifie si une variante "1ère Édition" existe
-    // (info disponible dans TCGdex sans scan séparé) pour l'indiquer en texte sous la carte.
+    // 1ère Édition — uniquement pour les séries Wizards / Neo
     const FIRST_EDITION_SERIES = ['base', 'neo']
     const candidates = cards.filter((c) => FIRST_EDITION_SERIES.includes(c.seriesId))
     if (candidates.length > 0) {
