@@ -15,7 +15,7 @@ app.use(express.json())
 app.use(cookieParser())
 
 // Proxy d'images — évite les blocages navigateur sur les CDN externes
-const ALLOWED_IMG_HOSTS = ['assets.tcgdex.net', 'assets.pokemon.com', 'www.pokepedia.fr', 'raw.githubusercontent.com']
+const ALLOWED_IMG_HOSTS = ['assets.tcgdex.net', 'assets.pokemon.com', 'www.pokepedia.fr', 'raw.githubusercontent.com', 'images.pokemontcg.io']
 app.get('/api/img', async (req, res) => {
   const { url } = req.query
   if (!url) return res.status(400).end()
@@ -241,28 +241,40 @@ app.get('/api/pokemon/:id/cards', async (req, res) => {
     if (!listRes.ok) throw new Error('TCGdex request failed')
     let list = await listRes.json()
 
-    // Recherche complémentaire par nom français — capture les promos non indexées par dexId
+    // Recherche complémentaire par nom français — capture Tag Teams, Escouades, promos non indexées par dexId
     if (nameFr) {
       try {
-        const nameRes = await fetch(`https://api.tcgdex.net/v2/fr/cards?name=${encodeURIComponent(nameFr)}`)
+        const nameRes = await fetch(`https://api.tcgdex.net/v2/fr/cards?name=like:${encodeURIComponent(nameFr)}`)
         if (nameRes.ok) {
           const nameList = await nameRes.json()
           const seen = new Set(list.map((c) => c.id))
-          const extras = (Array.isArray(nameList) ? nameList : []).filter((c) => !seen.has(c.id) && c.image)
+          // Inclure les cartes sans image si elles sont dans smp (fallback pokemontcg.io disponible)
+          const extras = (Array.isArray(nameList) ? nameList : []).filter((c) => {
+            if (seen.has(c.id)) return false
+            if (c.image) return true
+            const setId = c.id.split('-')[0]
+            return setId === 'smp'
+          })
           if (extras.length > 0) list = [...list, ...extras]
         }
       } catch {}
     }
 
+    const BASE_URL = process.env.VITE_API_URL || 'http://localhost:3001'
+
     function toCard(c) {
       const setId = c.id.slice(0, c.id.length - c.localId.length - 1)
       const setInfo = setsMap[setId] || {}
+      // Fallback pokemontcg.io pour les sets sans images TCGdex (ex: smp)
+      const imgBase = c.image
+        || (setId === 'smp' ? `https://images.pokemontcg.io/smp/${c.localId}` : null)
+      if (!imgBase) return null
       return {
         id: c.id,
         name: c.name,
         number: c.localId,
-        image: `http://localhost:3001/api/img?url=${encodeURIComponent(c.image + '/low.png')}`,
-        imageHigh: `http://localhost:3001/api/img?url=${encodeURIComponent(c.image + '/high.png')}`,
+        image: `${BASE_URL}/api/img?url=${encodeURIComponent(imgBase + (c.image ? '/low.png' : '.png'))}`,
+        imageHigh: `${BASE_URL}/api/img?url=${encodeURIComponent(imgBase + (c.image ? '/high.png' : '_hires.png'))}`,
         setName: setInfo.name || setId,
         setSeries: setInfo.series || null,
         seriesId: setInfo.seriesId || null,
@@ -271,8 +283,9 @@ app.get('/api/pokemon/:id/cards', async (req, res) => {
     }
 
     let cards = list
-      .filter((c) => c.image)
+      .filter((c) => c.image || c.id.split('-')[0] === 'smp')
       .map(toCard)
+      .filter(Boolean)
       .filter((c) => c.seriesId !== 'tcgp')
       .sort((a, b) => (a.releaseDate || '9999').localeCompare(b.releaseDate || '9999'))
       .map((c) => ({ ...c, edition: null }))
