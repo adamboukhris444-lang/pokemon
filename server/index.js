@@ -241,20 +241,15 @@ app.get('/api/pokemon/:id/cards', async (req, res) => {
     if (!listRes.ok) throw new Error('TCGdex request failed')
     let list = await listRes.json()
 
-    // Recherche complémentaire par nom français — capture Tag Teams, Escouades, promos non indexées par dexId
+    // Recherche complémentaire par nom français — capture Tag Teams (Escouades), promos non indexées par dexId
     if (nameFr) {
       try {
         const nameRes = await fetch(`https://api.tcgdex.net/v2/fr/cards?name=like:${encodeURIComponent(nameFr)}`)
         if (nameRes.ok) {
           const nameList = await nameRes.json()
           const seen = new Set(list.map((c) => c.id))
-          // Inclure les cartes sans image si elles sont dans smp (fallback pokemontcg.io disponible)
-          const extras = (Array.isArray(nameList) ? nameList : []).filter((c) => {
-            if (seen.has(c.id)) return false
-            if (c.image) return true
-            const setId = c.id.split('-')[0]
-            return setId === 'smp'
-          })
+          // Uniquement les cartes avec image française disponible sur TCGdex
+          const extras = (Array.isArray(nameList) ? nameList : []).filter((c) => !seen.has(c.id) && c.image)
           if (extras.length > 0) list = [...list, ...extras]
         }
       } catch {}
@@ -265,16 +260,12 @@ app.get('/api/pokemon/:id/cards', async (req, res) => {
     function toCard(c) {
       const setId = c.id.slice(0, c.id.length - c.localId.length - 1)
       const setInfo = setsMap[setId] || {}
-      // Fallback pokemontcg.io pour les sets sans images TCGdex (ex: smp)
-      const imgBase = c.image
-        || (setId === 'smp' ? `https://images.pokemontcg.io/smp/${c.localId}` : null)
-      if (!imgBase) return null
       return {
         id: c.id,
         name: c.name,
         number: c.localId,
-        image: `${BASE_URL}/api/img?url=${encodeURIComponent(imgBase + (c.image ? '/low.png' : '.png'))}`,
-        imageHigh: `${BASE_URL}/api/img?url=${encodeURIComponent(imgBase + (c.image ? '/high.png' : '_hires.png'))}`,
+        image: `${BASE_URL}/api/img?url=${encodeURIComponent(c.image + '/low.png')}`,
+        imageHigh: `${BASE_URL}/api/img?url=${encodeURIComponent(c.image + '/high.png')}`,
         setName: setInfo.name || setId,
         setSeries: setInfo.series || null,
         seriesId: setInfo.seriesId || null,
@@ -283,9 +274,8 @@ app.get('/api/pokemon/:id/cards', async (req, res) => {
     }
 
     let cards = list
-      .filter((c) => c.image || c.id.split('-')[0] === 'smp')
+      .filter((c) => c.image)
       .map(toCard)
-      .filter(Boolean)
       .filter((c) => c.seriesId !== 'tcgp')
       .sort((a, b) => (a.releaseDate || '9999').localeCompare(b.releaseDate || '9999'))
       .map((c) => ({ ...c, edition: null }))
