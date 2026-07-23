@@ -1,13 +1,71 @@
 import { useEffect, useState } from 'react'
 import { API } from './api.js'
 
+// Mapping ETB nom → { logo TCGdex, nom de série }
+const ETB_LOGO_MAP = {
+  'ETB — Écarlate et Violet':                     { logo: 'https://assets.tcgdex.net/fr/sv/sv01/logo.webp',     serie: 'Écarlate et Violet' },
+  'ETB — Évolutions à Paldea':                    { logo: 'https://assets.tcgdex.net/fr/sv/sv02/logo.webp',     serie: 'Écarlate et Violet' },
+  'ETB — Flammes Obsidiennes':                    { logo: 'https://assets.tcgdex.net/fr/sv/sv03/logo.webp',     serie: 'Écarlate et Violet' },
+  'ETB — 151':                                     { logo: 'https://assets.tcgdex.net/fr/sv/sv03.5/logo.webp',  serie: 'Écarlate et Violet' },
+  'ETB — Faille Paradoxe':                        { logo: 'https://assets.tcgdex.net/fr/sv/sv04/logo.webp',     serie: 'Écarlate et Violet' },
+  'ETB — Destinées de Paldea':                    { logo: 'https://assets.tcgdex.net/fr/sv/sv04.5/logo.webp',  serie: 'Écarlate et Violet' },
+  'ETB — Forces Temporelles':                     { logo: 'https://assets.tcgdex.net/fr/sv/sv05/logo.webp',     serie: 'Écarlate et Violet' },
+  'ETB — Mascarade Crépusculaire':                { logo: 'https://assets.tcgdex.net/fr/sv/sv06/logo.webp',     serie: 'Écarlate et Violet' },
+  'ETB — Couronne Stellaire':                     { logo: 'https://assets.tcgdex.net/fr/sv/sv07/logo.webp',     serie: 'Écarlate et Violet' },
+  'ETB — Étincelles Déferlantes':                 { logo: 'https://assets.tcgdex.net/fr/sv/sv08/logo.webp',     serie: 'Écarlate et Violet' },
+  'ETB — Évolutions Prismatiques':                { logo: 'https://assets.tcgdex.net/fr/sv/sv08.5/logo.webp',  serie: 'Écarlate et Violet' },
+  'ETB — Aventures Ensemble':                     { logo: 'https://assets.tcgdex.net/fr/sv/sv09/logo.webp',     serie: 'Écarlate et Violet' },
+  'ETB — Rivalités Destinées':                    { logo: 'https://assets.tcgdex.net/fr/sv/sv10/logo.webp',     serie: 'Écarlate et Violet' },
+  'ETB — Flamme Blanche':                         { logo: 'https://assets.tcgdex.net/fr/sv/sv10.5w/logo.webp', serie: 'Écarlate et Violet' },
+  'ETB — Foudre Noire':                           { logo: 'https://assets.tcgdex.net/fr/sv/sv10.5b/logo.webp', serie: 'Écarlate et Violet' },
+  'ETB — Épée et Bouclier':                       { logo: 'https://assets.tcgdex.net/fr/swsh/swsh1/logo.webp',    serie: 'Épée et Bouclier' },
+  'ETB — Clash des Rebelles':                     { logo: 'https://assets.tcgdex.net/fr/swsh/swsh2/logo.webp',    serie: 'Épée et Bouclier' },
+  'ETB — Ténèbres Embrasées':                     { logo: 'https://assets.tcgdex.net/fr/swsh/swsh3/logo.webp',    serie: 'Épée et Bouclier' },
+  'ETB — Voltage Éclatant':                       { logo: 'https://assets.tcgdex.net/fr/swsh/swsh4/logo.webp',    serie: 'Épée et Bouclier' },
+  'ETB — Destinées Radieuses Coffre Étincelant':  { logo: 'https://assets.tcgdex.net/fr/swsh/swsh4.5/logo.webp',  serie: 'Épée et Bouclier' },
+  'ETB — Styles de combat':                       { logo: 'https://assets.tcgdex.net/fr/swsh/swsh5/logo.webp',    serie: 'Épée et Bouclier' },
+  'ETB — Règne de Glace':                         { logo: 'https://assets.tcgdex.net/fr/swsh/swsh6/logo.webp',    serie: 'Épée et Bouclier' },
+  'ETB — Évolution Céleste':                      { logo: 'https://assets.tcgdex.net/fr/swsh/swsh7/logo.webp',    serie: 'Épée et Bouclier' },
+  'ETB — Poing de Fusion':                        { logo: 'https://assets.tcgdex.net/fr/swsh/swsh8/logo.webp',    serie: 'Épée et Bouclier' },
+  'ETB — Stars Étincelantes':                     { logo: 'https://assets.tcgdex.net/fr/swsh/swsh9/logo.webp',    serie: 'Épée et Bouclier' },
+  'ETB — Astres Radieux':                         { logo: 'https://assets.tcgdex.net/fr/swsh/swsh10/logo.webp',   serie: 'Épée et Bouclier' },
+  'ETB — Origine Perdue':                         { logo: 'https://assets.tcgdex.net/fr/swsh/swsh11/logo.webp',   serie: 'Épée et Bouclier' },
+  'ETB — Tempête Argentée':                       { logo: 'https://assets.tcgdex.net/fr/swsh/swsh12/logo.webp',   serie: 'Épée et Bouclier' },
+  'ETB — Zénith Suprême':                         { logo: 'https://assets.tcgdex.net/fr/swsh/swsh12.5/logo.webp', serie: 'Épée et Bouclier' },
+  'ETB — Duo de Choc':                            { logo: 'https://assets.tcgdex.net/fr/sm/sm9/logo.webp',        serie: 'Soleil et Lune' },
+  'ETB — Alliance Infaillible':                   { logo: 'https://assets.tcgdex.net/fr/sm/sm10/logo.webp',       serie: 'Soleil et Lune' },
+  'ETB — Harmonie des Esprits':                   { logo: 'https://assets.tcgdex.net/fr/sm/sm11/logo.webp',       serie: 'Soleil et Lune' },
+  'ETB — Éclipse Cosmique':                       { logo: 'https://assets.tcgdex.net/fr/sm/sm12/logo.webp',       serie: 'Soleil et Lune' },
+  'ETB — Destinées Occultes':                     { logo: 'https://assets.tcgdex.net/fr/sm/sm115/logo.webp',      serie: 'Soleil et Lune' },
+  'ETB — Légendes Brillantes':                    { logo: 'https://assets.tcgdex.net/fr/sm/sm3.5/logo.webp',      serie: 'Soleil et Lune' },
+  'ETB — Lumière Interdite':                      { logo: 'https://assets.tcgdex.net/fr/sm/sm6/logo.webp',        serie: 'Soleil et Lune' },
+  'ETB — Tempête Céleste':                        { logo: 'https://assets.tcgdex.net/fr/sm/sm7/logo.webp',        serie: 'Soleil et Lune' },
+  'ETB — Tonnerre Perdu':                         { logo: 'https://assets.tcgdex.net/fr/sm/sm8/logo.webp',        serie: 'Soleil et Lune' },
+  'ETB — Ultra-Prisme':                           { logo: 'https://assets.tcgdex.net/fr/sm/sm5/logo.webp',        serie: 'Soleil et Lune' },
+  'ETB — Méga-Évolution':                         { logo: 'https://assets.tcgdex.net/fr/me/me01/logo.webp',       serie: 'Méga-Évolution' },
+  'ETB — Héros Transcendants':                    { logo: 'https://assets.tcgdex.net/fr/xy/xy11/logo.webp',       serie: 'XY' },
+  'ETB — Équilibre Parfait':                      { logo: 'https://assets.tcgdex.net/fr/xy/xy10/logo.webp',       serie: 'XY' },
+  'ETB — Flammes Fantasmagoriques':               { logo: 'https://assets.tcgdex.net/fr/xy/xy9/logo.webp',        serie: 'XY' },
+  'ETB — Chaos Ascendant':                        { logo: 'https://assets.tcgdex.net/fr/xy/xy12/logo.webp',       serie: 'XY' },
+}
+
+// Couleurs de fond par série
+const SERIE_BG = {
+  'Écarlate et Violet': 'bg-red-50',
+  'Épée et Bouclier':   'bg-blue-50',
+  'Soleil et Lune':     'bg-yellow-50',
+  'Méga-Évolution':     'bg-purple-50',
+  'XY':                 'bg-green-50',
+}
+
 function ProductCard({ item }) {
   const [imgError, setImgError] = useState(false)
   const [imgError2, setImgError2] = useState(false)
+  const mapped = ETB_LOGO_MAP[item.nom]
 
   return (
     <div className="bg-white border-2 border-gray-200 rounded-xl overflow-hidden hover:border-poke-dark transition-colors flex flex-col">
-      <div className="bg-gray-50 h-52 flex items-center justify-center overflow-hidden">
+      <div className={`h-52 flex items-center justify-center overflow-hidden ${mapped && !item.image_url ? (SERIE_BG[mapped.serie] || 'bg-gray-50') : 'bg-gray-50'}`}>
         {(item.image_url || item.logo_url) && !imgError ? (
           <img
             src={imgError2 || !item.image_url ? item.logo_url : item.image_url}
@@ -19,6 +77,15 @@ function ProductCard({ item }) {
               else setImgError(true)
             }}
           />
+        ) : mapped ? (
+          <div className="flex flex-col items-center justify-center gap-2 px-3 w-full">
+            <img
+              src={mapped.logo}
+              alt={mapped.serie}
+              className="max-h-20 max-w-full object-contain"
+            />
+            <span className="text-xs font-semibold text-gray-500 text-center">{mapped.serie}</span>
+          </div>
         ) : (
           <div className="flex flex-col items-center justify-center gap-2 text-gray-300">
             <span className="text-5xl">{item.categorie === 'ETB' ? '🎁' : '📦'}</span>
