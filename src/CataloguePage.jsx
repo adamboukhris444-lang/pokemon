@@ -2,22 +2,26 @@ import { useEffect, useState } from 'react'
 import { API } from './api.js'
 
 function ProductCard({ item }) {
-  const [imgError, setImgError] = useState(false)
-  const [imgError2, setImgError2] = useState(false)
+  const [src, setSrc] = useState(item.image_url || item.logo_url || null)
+  const [failed, setFailed] = useState(false)
+
+  function handleError() {
+    if (src === item.image_url && item.logo_url) {
+      setSrc(item.logo_url)
+    } else {
+      setFailed(true)
+    }
+  }
 
   return (
     <div className="bg-white border-2 border-gray-200 rounded-xl overflow-hidden hover:border-poke-dark transition-colors flex flex-col">
       <div className="bg-gray-50 h-52 flex items-center justify-center overflow-hidden">
-        {(item.image_url || item.logo_url) && !imgError ? (
+        {src && !failed ? (
           <img
-            src={imgError2 || !item.image_url ? item.logo_url : item.image_url}
+            src={src}
             alt={item.nom}
-            className={`h-full w-full ${item.image_url && !imgError2 ? 'object-contain p-2' : 'object-contain p-4 opacity-80'}`}
-            loading="lazy"
-            onError={() => {
-              if (item.image_url && !imgError2) setImgError2(true)
-              else setImgError(true)
-            }}
+            className="h-full w-full object-contain p-3"
+            onError={handleError}
           />
         ) : (
           <div className="flex flex-col items-center justify-center gap-2 text-gray-300">
